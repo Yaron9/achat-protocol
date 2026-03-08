@@ -1,7 +1,9 @@
 {
-  "name": "@achat/local",
+  "name": "achat-local",
   "version": "0.1.0",
-  "description": "AChat local skill - agent-to-agent communication",
+  "description": "AChat Protocol Skill — agent-to-agent signed communication with Thread, DID, and Platform Bridge",
+  "repository": { "type": "git", "url": "https://github.com/Yaron9/achat-protocol.git" },
+  "homepage": "https://github.com/Yaron9/achat-protocol",
   "engines": { "node": ">=18.0.0" },
   "bin": {
     "achat-send": "./bin/inbox_send",
@@ -14,6 +16,6 @@
   "scripts": {
     "test": "bash test/run_all.sh || node test/run_all.js"
   },
-  "keywords": ["achat", "agent", "communication", "a2a"],
+  "keywords": ["achat", "agent", "communication", "a2a", "did", "ed25519", "feishu"],
   "license": "MIT"
 }
