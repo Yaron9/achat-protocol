@@ -1,0 +1,109 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
+
+// Usage: node verify_message <message_file_path>
+const args = process.argv.slice(2);
+if (args.length < 1) {
+  console.error('Usage: node verify_message <message_file_path>');
+  process.exit(1);
+}
+
+const filePath = args[0];
+
+if (!fs.existsSync(filePath)) {
+  console.error(`File not found: ${filePath}`);
+  process.exit(1);
+}
+
+const raw = fs.readFileSync(filePath, 'utf8');
+
+// Split at the signature block delimiter
+const sigDelimiter = '\n\n---\n';
+const delimIdx = raw.indexOf(sigDelimiter);
+
+if (delimIdx === -1) {
+  console.log('UNSIGNED — 消息无签名（旧格式，跳过）');
+  process.exit(0);
+}
+
+const headerAndBody = raw.slice(0, delimIdx);
+const sigBlock = raw.slice(delimIdx + sigDelimiter.length);
+
+// Parse signature block
+const sigLines = {};
+for (const line of sigBlock.split('\n')) {
+  const colonIdx = line.indexOf(': ');
+  if (colonIdx !== -1) {
+    const key = line.slice(0, colonIdx).trim();
+    const value = line.slice(colonIdx + 2).trim();
+    sigLines[key] = value;
+  }
+}
+
+if (!sigLines['SIGNATURE'] || !sigLines['SIGNED_BY']) {
+  console.log('UNSIGNED — 消息无签名（旧格式，跳过）');
+  process.exit(0);
+}
+
+const signatureBase64 = sigLines['SIGNATURE'];
+const signedBy = sigLines['SIGNED_BY'];
+
+// Parse header fields from the message
+const headerLines = {};
+for (const line of headerAndBody.split('\n')) {
+  const colonIdx = line.indexOf(': ');
+  if (colonIdx !== -1) {
+    const key = line.slice(0, colonIdx).trim();
+    const value = line.slice(colonIdx + 2).trim();
+    headerLines[key] = value;
+  }
+}
+
+const fromKey = headerLines['FROM'];
+const toKey = headerLines['TO'];
+const ts = headerLines['TS'];
+const threadId = headerLines['THREAD_ID'];
+
+// Extract body: everything after the blank line following headers
+const emptyLineIdx = headerAndBody.indexOf('\n\n');
+const body = emptyLineIdx !== -1 ? headerAndBody.slice(emptyLineIdx + 2) : '';
+
+// Load public key for the signer
+const keyFile = path.join(os.homedir(), '.metame', 'agents', signedBy, 'key.json');
+if (!fs.existsSync(keyFile)) {
+  console.error(`Key not found for signer: ${signedBy}`);
+  process.exit(1);
+}
+
+let publicKey;
+try {
+  const keyData = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+  const publicKeyDer = Buffer.from(keyData.publicKey, 'base64');
+  publicKey = crypto.createPublicKey({ key: publicKeyDer, format: 'der', type: 'spki' });
+} catch (err) {
+  console.error(`Failed to load public key: ${err.message}`);
+  process.exit(1);
+}
+
+// Reconstruct signing payload
+const signingPayload = `${fromKey}${toKey}${ts}${threadId}${body}`;
+const signature = Buffer.from(signatureBase64, 'base64');
+
+try {
+  const valid = crypto.verify(null, Buffer.from(signingPayload, 'utf8'), publicKey, signature);
+  if (valid) {
+    console.log(`VALID ✅ — 签名验证通过，发件方: ${signedBy}`);
+    process.exit(0);
+  } else {
+    console.log('INVALID ❌ — 签名验证失败');
+    process.exit(1);
+  }
+} catch (err) {
+  console.log('INVALID ❌ — 签名验证失败');
+  process.exit(1);
+}
