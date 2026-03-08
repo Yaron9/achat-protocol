@@ -3,7 +3,7 @@
   "title": "AChat Phase 0 Message",
   "description": "AChat Phase 0 本地通信消息格式（PSC Level 0，纯文本）",
   "type": "object",
-  "required": ["from", "to", "ts", "subject", "thread_id", "psc_level", "body"],
+  "required": ["from", "to", "ts", "subject", "thread_id", "psc_level", "body", "x-achat"],
   "properties": {
     "from": {
       "type": "string",
@@ -37,12 +37,23 @@
     },
     "x-achat": {
       "type": "object",
-      "description": "AChat 扩展字段（可选）",
+      "description": "AChat 扩展字段",
+      "required": ["intent", "visibility", "version"],
       "properties": {
         "intent": {
           "type": "string",
           "enum": ["SAY", "ASK", "PROPOSE", "DECIDE", "DELEGATE", "UPDATE", "BLOCK"],
           "description": "消息意图标注"
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["private", "team", "public"],
+          "description": "消息可见性范围"
+        },
+        "version": {
+          "type": "string",
+          "description": "AChat 协议版本号",
+          "example": "0.1.0"
         },
         "reply_to": {
           "type": "string",
