@@ -54,7 +54,33 @@ const content = [
   body,
 ].join('\n');
 
-fs.writeFileSync(filepath, content, 'utf8');
+// Attempt to sign the message
+let finalContent = content;
+const keyFile = path.join(os.homedir(), '.metame', 'agents', fromKey, 'key.json');
+if (fs.existsSync(keyFile)) {
+  try {
+    const keyData = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+    const privateKeyDer = Buffer.from(keyData.privateKey, 'base64');
+    const privateKey = crypto.createPrivateKey({ key: privateKeyDer, format: 'der', type: 'pkcs8' });
+
+    // Canonical signing payload: FROM + TO + TS + THREAD_ID + body
+    const signingPayload = `${fromKey}${toKey}${ts}${threadId}${body}`;
+    const signature = crypto.sign(null, Buffer.from(signingPayload, 'utf8'), privateKey);
+    const signatureBase64 = signature.toString('base64');
+    const signedAt = new Date().toISOString();
+
+    finalContent = content + '\n\n---\n' +
+      `SIGNATURE: ${signatureBase64}\n` +
+      `SIGNED_BY: ${fromKey}\n` +
+      `SIGNED_AT: ${signedAt}`;
+  } catch (err) {
+    console.warn(`[achat-local] Signing skipped (error): ${err.message}`);
+  }
+} else {
+  console.warn(`[achat-local] No key found for ${fromKey}, sending unsigned.`);
+}
+
+fs.writeFileSync(filepath, finalContent, 'utf8');
 console.log(`[achat-local] Message written → ${filepath}`);
 
 // Dispatch notification via MetaMe dispatch_to (best-effort)

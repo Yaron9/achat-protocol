@@ -1,0 +1,49 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const os = require('os');
+
+// Usage: node keygen <agent_id>
+const args = process.argv.slice(2);
+if (args.length < 1) {
+  console.error('Usage: node keygen <agent_id>');
+  process.exit(1);
+}
+
+const agentId = args[0];
+const agentDir = path.join(os.homedir(), '.metame', 'agents', agentId);
+const keyFile = path.join(agentDir, 'key.json');
+
+// Check agent directory exists
+if (!fs.existsSync(agentDir)) {
+  console.error(`Agent directory not found: ${agentDir}`);
+  process.exit(1);
+}
+
+// Idempotent: skip if key already exists
+if (fs.existsSync(keyFile)) {
+  const existing = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+  console.log(`[keygen] Key already exists for ${agentId}, skipping.`);
+  console.log(`PUBLIC_KEY: ${existing.publicKey}`);
+  process.exit(0);
+}
+
+// Generate Ed25519 key pair
+const { privateKey, publicKey } = crypto.generateKeyPairSync('ed25519');
+
+const privateKeyBase64 = privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
+const publicKeyBase64 = publicKey.export({ type: 'spki', format: 'der' }).toString('base64');
+
+const keyData = {
+  type: 'ed25519',
+  privateKey: privateKeyBase64,
+  publicKey: publicKeyBase64,
+  createdAt: new Date().toISOString(),
+};
+
+fs.writeFileSync(keyFile, JSON.stringify(keyData, null, 2), { encoding: 'utf8', mode: 0o600 });
+console.log(`[keygen] Key pair generated for ${agentId} → ${keyFile}`);
+console.log(`PUBLIC_KEY: ${publicKeyBase64}`);
