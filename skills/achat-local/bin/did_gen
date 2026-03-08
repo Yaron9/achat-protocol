@@ -1,0 +1,89 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// Base58btc alphabet (Bitcoin alphabet)
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function base58Encode(buf) {
+  let carry;
+  const digits = [0];
+  for (let i = 0; i < buf.length; i++) {
+    carry = buf[i];
+    for (let j = 0; j < digits.length; j++) {
+      carry += digits[j] << 8;
+      digits[j] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = (carry / 58) | 0;
+    }
+  }
+  // Add leading '1's for each leading zero byte
+  let result = '';
+  for (let i = 0; i < buf.length && buf[i] === 0; i++) {
+    result += '1';
+  }
+  for (let i = digits.length - 1; i >= 0; i--) {
+    result += BASE58_ALPHABET[digits[i]];
+  }
+  return result;
+}
+
+function generateDid(publicKeyBase64) {
+  // Ed25519 SubjectPublicKeyInfo DER: 12 bytes header + 32 bytes raw key
+  const der = Buffer.from(publicKeyBase64, 'base64');
+  const rawPubKey = der.slice(12); // 32 bytes
+
+  // Multicodec prefix for Ed25519: [0xed, 0x01]
+  const multicodec = Buffer.from([0xed, 0x01]);
+  const payload = Buffer.concat([multicodec, rawPubKey]); // 34 bytes
+
+  // Base58btc encode, prepend multibase prefix 'z'
+  const encoded = 'z' + base58Encode(payload);
+  return `did:key:${encoded}`;
+}
+
+// Usage: did_gen [agent_id]
+const args = process.argv.slice(2);
+const agentId = args[0] || process.env.ACHAT_AGENT_ID || 'achat_pm';
+
+const agentDir = path.join(os.homedir(), '.metame', 'agents', agentId);
+const keyFile = path.join(agentDir, 'key.json');
+const yamlFile = path.join(agentDir, 'agent.yaml');
+
+if (!fs.existsSync(keyFile)) {
+  console.error(`[did_gen] key.json not found for agent: ${agentId}`);
+  process.exit(1);
+}
+
+const keyData = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+const did = generateDid(keyData.publicKey);
+
+// Update agent.yaml did field
+if (fs.existsSync(yamlFile)) {
+  const yamlContent = fs.readFileSync(yamlFile, 'utf8');
+  const existingDidMatch = yamlContent.match(/^did:\s*(.+)$/m);
+  const existingDid = existingDidMatch ? existingDidMatch[1].trim() : null;
+
+  if (existingDid === did) {
+    console.log(`[did_gen] DID already set (already set): ${did}`);
+  } else {
+    // Replace or set did field
+    let updated;
+    if (/^did:/m.test(yamlContent)) {
+      updated = yamlContent.replace(/^did:.*$/m, `did: ${did}`);
+    } else {
+      updated = yamlContent + `\ndid: ${did}\n`;
+    }
+    fs.writeFileSync(yamlFile, updated, 'utf8');
+  }
+}
+
+console.log(`DID: ${did}`);
+
+module.exports = { generateDid, base58Encode };
