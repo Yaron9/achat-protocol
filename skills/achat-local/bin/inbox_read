@@ -1,0 +1,94 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+// Usage: node inbox_read <my_key> [--all]
+const args = process.argv.slice(2);
+if (args.length < 1) {
+  console.error('Usage: node inbox_read <my_key> [--all]');
+  process.exit(1);
+}
+
+const myKey = args[0];
+const showAll = args.includes('--all');
+
+const inboxBase = path.join(os.homedir(), '.metame', 'memory', 'inbox');
+const inboxDir = path.join(inboxBase, myKey);
+const readDir = path.join(inboxDir, 'read');
+
+function parseMessage(filepath) {
+  const raw = fs.readFileSync(filepath, 'utf8');
+  const [headerBlock, ...bodyParts] = raw.split(/\n\n/);
+  const body = bodyParts.join('\n\n').trim();
+  const preview = body.slice(0, 100) + (body.length > 100 ? '...' : '');
+
+  const headers = {};
+  for (const line of headerBlock.split('\n')) {
+    const colonIdx = line.indexOf(':');
+    if (colonIdx > 0) {
+      const key = line.slice(0, colonIdx).trim().toLowerCase();
+      headers[key] = line.slice(colonIdx + 1).trim();
+    }
+  }
+
+  return {
+    filepath,
+    from: headers['from'] || '(unknown)',
+    to: headers['to'] || '(unknown)',
+    ts: headers['ts'] || '(unknown)',
+    subject: headers['subject'] || '(no subject)',
+    thread_id: headers['thread_id'] || '',
+    psc_level: headers['psc_level'] || '0',
+    preview,
+  };
+}
+
+function listMessages(dir, label) {
+  if (!fs.existsSync(dir)) {
+    console.log(`[achat-local] No messages in ${label} (directory not found)`);
+    return;
+  }
+
+  const files = fs.readdirSync(dir)
+    .filter(f => f.endsWith('.md'))
+    .map(f => path.join(dir, f))
+    .sort();
+
+  if (files.length === 0) {
+    console.log(`[achat-local] No messages in ${label}`);
+    return;
+  }
+
+  console.log(`\n=== ${label} (${files.length} message${files.length !== 1 ? 's' : ''}) ===\n`);
+
+  for (const filepath of files) {
+    try {
+      const msg = parseMessage(filepath);
+      console.log(`FROM:    ${msg.from}`);
+      console.log(`TS:      ${msg.ts}`);
+      console.log(`SUBJECT: ${msg.subject}`);
+      if (msg.thread_id) console.log(`THREAD:  ${msg.thread_id}`);
+      console.log(`PREVIEW: ${msg.preview}`);
+      console.log(`FILE:    ${filepath}`);
+      console.log('---');
+    } catch (err) {
+      console.warn(`[achat-local] Failed to parse ${filepath}: ${err.message}`);
+    }
+  }
+}
+
+if (!fs.existsSync(inboxDir)) {
+  console.log(`[achat-local] Inbox not found for key: ${myKey}`);
+  console.log(`Expected: ${inboxDir}`);
+  process.exit(0);
+}
+
+if (showAll) {
+  listMessages(inboxDir, `UNREAD (${myKey})`);
+  listMessages(readDir, `READ/HISTORY (${myKey})`);
+} else {
+  listMessages(inboxDir, `UNREAD (${myKey})`);
+}

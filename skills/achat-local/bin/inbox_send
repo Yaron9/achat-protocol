@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { execSync } = require('child_process');
+const os = require('os');
+
+// Usage: node inbox_send <to_key> <from_key> <subject> <message_body>
+const args = process.argv.slice(2);
+if (args.length < 4) {
+  console.error('Usage: node inbox_send <to_key> <from_key> <subject> <message_body>');
+  process.exit(1);
+}
+
+const [toKey, fromKey, subject, ...bodyParts] = args;
+const body = bodyParts.join(' ');
+
+const inboxBase = path.join(os.homedir(), '.metame', 'memory', 'inbox');
+const inboxDir = path.join(inboxBase, toKey);
+
+// Ensure inbox directory exists
+fs.mkdirSync(inboxDir, { recursive: true });
+
+// Generate metadata
+const ts = new Date().toISOString();
+const threadId = crypto.randomUUID();
+const dateSlug = ts.replace(/[:.]/g, '-').slice(0, 19);
+const filename = `${dateSlug}_${fromKey}.md`;
+const filepath = path.join(inboxDir, filename);
+
+// Build message file
+const content = [
+  `FROM: ${fromKey}`,
+  `TO: ${toKey}`,
+  `TS: ${ts}`,
+  `SUBJECT: ${subject}`,
+  `THREAD_ID: ${threadId}`,
+  `PSC_LEVEL: 0`,
+  '',
+  body,
+].join('\n');
+
+fs.writeFileSync(filepath, content, 'utf8');
+console.log(`[achat-local] Message written → ${filepath}`);
+
+// Dispatch notification via MetaMe dispatch_to (best-effort)
+try {
+  const dispatchBin = path.join(os.homedir(), '.metame', 'bin', 'dispatch_to');
+  execSync(`node ${dispatchBin} ${toKey} "📨 新消息来自 ${fromKey}: ${subject}" --from ${fromKey}`, {
+    stdio: 'pipe',
+    timeout: 5000,
+  });
+  console.log(`[achat-local] Notification dispatched → ${toKey}`);
+} catch (err) {
+  // dispatch_to may not be available in all environments; non-fatal
+  console.warn(`[achat-local] dispatch_to skipped (not available or failed): ${err.message}`);
+}
+
+console.log(`[achat-local] SENT  from=${fromKey} to=${toKey} subject="${subject}" thread_id=${threadId}`);

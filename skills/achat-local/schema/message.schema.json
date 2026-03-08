@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AChat Phase 0 Message",
+  "description": "AChat Phase 0 本地通信消息格式（PSC Level 0，纯文本）",
+  "type": "object",
+  "required": ["from", "to", "ts", "subject", "thread_id", "psc_level", "body"],
+  "properties": {
+    "from": {
+      "type": "string",
+      "description": "发送方 agent key（对应 MetaMe dispatch table 中的 key）"
+    },
+    "to": {
+      "type": "string",
+      "description": "接收方 agent key"
+    },
+    "ts": {
+      "type": "string",
+      "format": "date-time",
+      "description": "消息发送时间（ISO 8601）"
+    },
+    "subject": {
+      "type": "string",
+      "description": "消息主题"
+    },
+    "thread_id": {
+      "type": "string",
+      "description": "线程唯一标识（UUID v4），同一对话共享同一 thread_id"
+    },
+    "psc_level": {
+      "type": "integer",
+      "enum": [0],
+      "description": "PSC（Progressive Semantic Compression）级别，Phase 0 固定为 0（纯文本）"
+    },
+    "body": {
+      "type": "string",
+      "description": "消息正文（纯文本，Markdown 友好）"
+    },
+    "x-achat": {
+      "type": "object",
+      "description": "AChat 扩展字段（可选）",
+      "properties": {
+        "intent": {
+          "type": "string",
+          "enum": ["SAY", "ASK", "PROPOSE", "DECIDE", "DELEGATE", "UPDATE", "BLOCK"],
+          "description": "消息意图标注"
+        },
+        "reply_to": {
+          "type": "string",
+          "description": "回复的消息 thread_id（用于线程关联）"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
