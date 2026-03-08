@@ -1,0 +1,181 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://achat.protocol/schema/platform_bridge.schema.json",
+  "title": "AChat Platform Bridge Interface",
+  "description": "任何平台适配器必须实现的标准接口规范。适配器负责将平台原始消息标准化为 AChat 格式，以及将 AChat 消息发送到目标平台。",
+  "definitions": {
+    "IncomingMessage": {
+      "type": "object",
+      "description": "平台原始消息标准化后的中间格式",
+      "required": ["platform", "chat_id", "sender_id", "text", "ts"],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "enum": ["wechat", "feishu", "telegram", "metame", "slack", "discord"],
+          "description": "消息来源平台标识"
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "平台侧会话/群组 ID"
+        },
+        "sender_id": {
+          "type": "string",
+          "description": "发送方在平台上的用户 ID 或 Bot ID"
+        },
+        "sender_name": {
+          "type": "string",
+          "description": "发送方显示名称（可选）"
+        },
+        "text": {
+          "type": "string",
+          "description": "消息文本内容（纯文本，Markdown 友好）"
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time",
+          "description": "消息在平台侧的时间戳（ISO 8601）"
+        },
+        "raw": {
+          "type": "object",
+          "description": "平台原始消息体（原样保留，用于调试与审计）",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "OutgoingMessage": {
+      "type": "object",
+      "description": "AChat 网络发往目标平台的消息格式",
+      "required": ["platform", "chat_id", "text"],
+      "properties": {
+        "platform": {
+          "type": "string",
+          "enum": ["wechat", "feishu", "telegram", "metame", "slack", "discord"],
+          "description": "目标平台标识"
+        },
+        "chat_id": {
+          "type": "string",
+          "description": "目标会话/群组 ID"
+        },
+        "text": {
+          "type": "string",
+          "description": "消息正文（纯文本或 Markdown）"
+        },
+        "thread_id": {
+          "type": "string",
+          "description": "AChat Thread ID，用于关联多轮对话（可选）"
+        },
+        "reply_to_id": {
+          "type": "string",
+          "description": "回复的平台侧消息 ID（可选，用于平台内引用回复）"
+        }
+      },
+      "additionalProperties": false
+    },
+    "BridgeAdapter": {
+      "type": "object",
+      "description": "Platform Bridge 适配器的 manifest（描述一个具体的适配器实现）",
+      "required": ["name", "platform", "version", "capabilities", "auth_type"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "适配器名称，如 MetaMeLocalAdapter / WeChatBotAdapter"
+        },
+        "platform": {
+          "type": "string",
+          "enum": ["wechat", "feishu", "telegram", "metame", "slack", "discord"],
+          "description": "适配的目标平台"
+        },
+        "version": {
+          "type": "string",
+          "description": "适配器版本号，遵循 semver",
+          "example": "0.1.0"
+        },
+        "capabilities": {
+          "type": "array",
+          "description": "适配器支持的能力列表",
+          "items": {
+            "type": "string",
+            "enum": [
+              "normalize",
+              "send",
+              "receive_webhook",
+              "signature_verify",
+              "thread_tracking",
+              "media_send"
+            ]
+          },
+          "minItems": 1
+        },
+        "endpoint": {
+          "type": "string",
+          "format": "uri",
+          "description": "适配器服务端点（HTTP/HTTPS，本地模式可省略）"
+        },
+        "auth_type": {
+          "type": "string",
+          "enum": ["none", "bearer_token", "webhook_secret", "oauth2", "local_ipc"],
+          "description": "适配器与平台之间的认证方式"
+        }
+      },
+      "additionalProperties": false
+    },
+    "NormalizedAchatMessage": {
+      "type": "object",
+      "description": "IncomingMessage 标准化后的 AChat 消息（可直接传给 inbox_send）",
+      "required": ["from", "to", "subject", "body", "intent", "thread_id"],
+      "properties": {
+        "from": {
+          "type": "string",
+          "description": "AChat 网络中的发送方 agent key（由适配器完成平台 ID → agent key 映射）"
+        },
+        "to": {
+          "type": "string",
+          "description": "AChat 网络中的接收方 agent key"
+        },
+        "subject": {
+          "type": "string",
+          "description": "消息主题（适配器自动生成，如 [wechat] 来自 UserName 的消息）"
+        },
+        "body": {
+          "type": "string",
+          "description": "消息正文，对应原始 IncomingMessage.text"
+        },
+        "intent": {
+          "type": "string",
+          "enum": ["SAY", "ASK", "PROPOSE", "DECIDE", "DELEGATE", "UPDATE", "BLOCK"],
+          "description": "消息意图，默认为 SAY",
+          "default": "SAY"
+        },
+        "thread_id": {
+          "type": "string",
+          "description": "AChat Thread ID（UUID v4），适配器维护平台会话 → thread_id 的映射"
+        },
+        "platform_ref": {
+          "type": "object",
+          "description": "平台来源引用，用于追踪和回调",
+          "properties": {
+            "platform": {
+              "type": "string",
+              "description": "来源平台"
+            },
+            "chat_id": {
+              "type": "string",
+              "description": "平台侧会话 ID"
+            },
+            "sender_id": {
+              "type": "string",
+              "description": "平台侧发送方 ID"
+            },
+            "message_ts": {
+              "type": "string",
+              "description": "平台侧消息时间戳"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
