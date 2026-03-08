@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+'use strict';
+
+/**
+ * bridge_send - CLI tool to send a message via a platform adapter.
+ *
+ * Usage: bridge_send <platform> <chat_id> <text> [--config path]
+ */
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const yaml = require('/Users/yaron/node_modules/js-yaml');
+
+const args = process.argv.slice(2);
+
+if (args.length < 3 || args[0] === '--help' || args[0] === '-h') {
+  console.log('Usage: bridge_send <platform> <chat_id> <text> [--config path]');
+  console.log('');
+  console.log('  platform   feishu | wechat_work');
+  console.log('  chat_id    Platform chat/user identifier');
+  console.log('  text       Message text to send');
+  console.log('  --config   Path to bridge.yaml (optional)');
+  console.log('');
+  console.log('Examples:');
+  console.log('  bridge_send feishu oc_abc123 "Hello from AChat!"');
+  console.log('  bridge_send wechat_work UserId001 "Task completed" --config ~/bridge.yaml');
+  process.exit(0);
+}
+
+const [platform, chatId, ...rest] = args;
+
+// Extract --config option
+let configPath = null;
+const textParts = [];
+for (let i = 0; i < rest.length; i++) {
+  if (rest[i] === '--config' && rest[i + 1]) {
+    configPath = rest[i + 1];
+    i++;
+  } else {
+    textParts.push(rest[i]);
+  }
+}
+const text = textParts.join(' ');
+
+if (!text) {
+  console.error('Error: message text is required');
+  process.exit(1);
+}
+
+// Resolve config
+if (!configPath) {
+  if (process.env.ACHAT_BRIDGE_CONFIG) {
+    configPath = process.env.ACHAT_BRIDGE_CONFIG;
+  } else {
+    const agentId = process.env.ACHAT_AGENT_ID || 'achat_pm';
+    const metamePath = path.join(os.homedir(), '.metame', 'agents', agentId, 'bridge.yaml');
+    const localPath = path.join(process.cwd(), 'bridge.yaml');
+    const examplePath = path.join(__dirname, '..', 'config', 'bridge.example.yaml');
+
+    if (fs.existsSync(metamePath)) configPath = metamePath;
+    else if (fs.existsSync(localPath)) configPath = localPath;
+    else configPath = examplePath;
+  }
+}
+
+let config;
+try {
+  config = yaml.load(fs.readFileSync(configPath, 'utf8'));
+} catch (err) {
+  console.error(`Error: Failed to load config from ${configPath}: ${err.message}`);
+  process.exit(1);
+}
+
+// Check platform is enabled
+const platformConfig = (config.platforms || {})[platform];
+if (!platformConfig) {
+  console.error(`Error: Platform '${platform}' not found in config`);
+  process.exit(1);
+}
+if (!platformConfig.enabled) {
+  console.error(`Error: Platform '${platform}' is not enabled in config`);
+  process.exit(1);
+}
+
+// Load adapter
+let adapter;
+try {
+  adapter = require(path.join(__dirname, '..', 'lib', 'adapters', platform));
+} catch (err) {
+  console.error(`Error: No adapter found for platform '${platform}': ${err.message}`);
+  process.exit(1);
+}
+
+// Build outgoing message
+const outMsg = {
+  to_chat_id: chatId,
+  to_user: chatId,
+  text,
+  reply_token: null,  // new message, not a reply
+};
+
+console.log(`[bridge_send] Sending to ${platform}:${chatId} ...`);
+
+adapter.send(outMsg, platformConfig)
+  .then((result) => {
+    console.log('[bridge_send] Done:', JSON.stringify(result));
+  })
+  .catch((err) => {
+    console.error('[bridge_send] Error:', err.message);
+    process.exit(1);
+  });

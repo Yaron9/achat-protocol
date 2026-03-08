@@ -1,0 +1,21 @@
+port: 9988
+agent_id: achat_pm  # 本机 agent
+
+platforms:
+  feishu:
+    enabled: true
+    app_id: "cli_xxx"
+    app_secret: "xxx"
+    verification_token: "xxx"
+    encrypt_key: ""  # 留空表示不加密
+
+  wechat_work:
+    enabled: false
+    corp_id: "xxx"
+    corp_secret: "xxx"
+    token: "xxx"
+    agent_id_ww: "xxx"  # 企业微信应用 AgentID（避免和 AChat agent_id 冲突）
+
+routing:
+  # chat_id → agent_id（收到消息路由给哪个 agent）
+  oc_example: achat_pm

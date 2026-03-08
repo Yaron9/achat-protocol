@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const yaml = require('/Users/yaron/node_modules/js-yaml');
+
+const { start } = require(path.join(__dirname, '..', 'lib', 'bridge_server'));
+
+// Parse CLI args
+const args = process.argv.slice(2);
+let configPath = null;
+let portOverride = null;
+
+for (let i = 0; i < args.length; i++) {
+  if (args[i] === '--config' && args[i + 1]) {
+    configPath = args[i + 1];
+    i++;
+  } else if (args[i] === '--port' && args[i + 1]) {
+    portOverride = parseInt(args[i + 1], 10);
+    i++;
+  }
+}
+
+// Default config locations
+if (!configPath) {
+  // Try ACHAT_BRIDGE_CONFIG env var
+  if (process.env.ACHAT_BRIDGE_CONFIG) {
+    configPath = process.env.ACHAT_BRIDGE_CONFIG;
+  } else {
+    // Try ~/.metame/agents/{agent_id}/bridge.yaml (agent_id from env or default)
+    const agentId = process.env.ACHAT_AGENT_ID || 'achat_pm';
+    const metamePath = path.join(os.homedir(), '.metame', 'agents', agentId, 'bridge.yaml');
+    const localPath = path.join(process.cwd(), 'bridge.yaml');
+    const skillConfigPath = path.join(__dirname, '..', 'config', 'bridge.example.yaml');
+
+    if (fs.existsSync(metamePath)) {
+      configPath = metamePath;
+    } else if (fs.existsSync(localPath)) {
+      configPath = localPath;
+    } else {
+      configPath = skillConfigPath;
+    }
+  }
+}
+
+// Load config
+let config;
+try {
+  const raw = fs.readFileSync(configPath, 'utf8');
+  config = yaml.load(raw);
+  console.log(`[bridge] Config loaded from: ${configPath}`);
+} catch (err) {
+  console.error(`[bridge] ERROR: Failed to load config from ${configPath}: ${err.message}`);
+  process.exit(1);
+}
+
+// Start server
+start(config, portOverride).then((server) => {
+  // Graceful shutdown
+  process.on('SIGINT', () => {
+    console.log('\n[bridge] Shutting down...');
+    server.close(() => {
+      console.log('[bridge] Server closed.');
+      process.exit(0);
+    });
+  });
+  process.on('SIGTERM', () => {
+    server.close(() => process.exit(0));
+  });
+}).catch((err) => {
+  console.error('[bridge] Failed to start:', err.message);
+  process.exit(1);
+});
