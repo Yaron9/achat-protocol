@@ -88,8 +88,23 @@ const dateSlug = ts.replace(/[:.]/g, '-').slice(0, 19);
 const filename = `${dateSlug}_${fromKey}.md`;
 const filepath = path.join(inboxDir, filename);
 
+// Read sender's DID from agent.yaml if available
+let fromDid = null;
+const senderYaml = path.join(os.homedir(), '.metame', 'agents', fromKey, 'agent.yaml');
+if (fs.existsSync(senderYaml)) {
+  try {
+    const yamlContent = fs.readFileSync(senderYaml, 'utf8');
+    const didMatch = yamlContent.match(/^did:\s*(.+)$/m);
+    if (didMatch && didMatch[1].trim() && didMatch[1].trim() !== 'null') {
+      fromDid = didMatch[1].trim();
+    }
+  } catch (e) {
+    // non-fatal
+  }
+}
+
 // Build message file
-const content = [
+const headers = [
   `FROM: ${fromKey}`,
   `TO: ${toKey}`,
   `TS: ${ts}`,
@@ -99,9 +114,13 @@ const content = [
   `X-ACHAT-INTENT: ${intent}`,
   `X-ACHAT-VISIBILITY: private`,
   `X-ACHAT-VERSION: 0.1.0`,
-  '',
-  body,
-].join('\n');
+];
+if (fromDid) {
+  headers.push(`X-ACHAT-FROM-DID: ${fromDid}`);
+}
+headers.push('', body);
+
+const content = headers.join('\n');
 
 // Attempt to sign the message
 let finalContent = content;

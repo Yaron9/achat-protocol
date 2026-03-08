@@ -6,6 +6,51 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 
+// ---- Inline DID generation (did:key from Ed25519 public key) ----
+const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+function base58Encode(buf) {
+  let carry;
+  const digits = [0];
+  for (let i = 0; i < buf.length; i++) {
+    carry = buf[i];
+    for (let j = 0; j < digits.length; j++) {
+      carry += digits[j] << 8;
+      digits[j] = carry % 58;
+      carry = (carry / 58) | 0;
+    }
+    while (carry > 0) {
+      digits.push(carry % 58);
+      carry = (carry / 58) | 0;
+    }
+  }
+  let result = '';
+  for (let i = 0; i < buf.length && buf[i] === 0; i++) result += '1';
+  for (let i = digits.length - 1; i >= 0; i--) result += BASE58_ALPHABET[digits[i]];
+  return result;
+}
+
+function generateAndWriteDid(agentId, publicKeyBase64) {
+  const der = Buffer.from(publicKeyBase64, 'base64');
+  const rawPubKey = der.slice(12);
+  const payload = Buffer.concat([Buffer.from([0xed, 0x01]), rawPubKey]);
+  const did = `did:key:z${base58Encode(payload)}`;
+
+  const yamlFile = path.join(os.homedir(), '.metame', 'agents', agentId, 'agent.yaml');
+  if (fs.existsSync(yamlFile)) {
+    const yamlContent = fs.readFileSync(yamlFile, 'utf8');
+    let updated;
+    if (/^did:/m.test(yamlContent)) {
+      updated = yamlContent.replace(/^did:.*$/m, `did: ${did}`);
+    } else {
+      updated = yamlContent + `\ndid: ${did}\n`;
+    }
+    fs.writeFileSync(yamlFile, updated, 'utf8');
+  }
+  return did;
+}
+// ---- End inline DID generation ----
+
 // Usage: node keygen <agent_id>
 const args = process.argv.slice(2);
 if (args.length < 1) {
@@ -23,11 +68,13 @@ if (!fs.existsSync(agentDir)) {
   process.exit(1);
 }
 
-// Idempotent: skip if key already exists
+// Idempotent: skip if key already exists, but still update DID
 if (fs.existsSync(keyFile)) {
   const existing = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
   console.log(`[keygen] Key already exists for ${agentId}, skipping.`);
   console.log(`PUBLIC_KEY: ${existing.publicKey}`);
+  const did = generateAndWriteDid(agentId, existing.publicKey);
+  console.log(`DID: ${did}`);
   process.exit(0);
 }
 
@@ -47,3 +94,7 @@ const keyData = {
 fs.writeFileSync(keyFile, JSON.stringify(keyData, null, 2), { encoding: 'utf8', mode: 0o600 });
 console.log(`[keygen] Key pair generated for ${agentId} → ${keyFile}`);
 console.log(`PUBLIC_KEY: ${publicKeyBase64}`);
+
+// Auto-generate DID from new public key
+const did = generateAndWriteDid(agentId, publicKeyBase64);
+console.log(`DID: ${did}`);
