@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const yaml = require('/Users/yaron/node_modules/js-yaml');
+
+const agentsBase = path.join(os.homedir(), '.metame', 'agents');
+const currentAgent = process.env.ACHAT_AGENT_ID || 'achat_pm';
+
+const args = process.argv.slice(2);
+const cmd = args[0];
+
+if (!cmd || !['add', 'remove', 'list'].includes(cmd)) {
+  console.error('Usage:');
+  console.error('  authorize add <agent_id>');
+  console.error('  authorize remove <agent_id>');
+  console.error('  authorize list [agent_id]');
+  process.exit(1);
+}
+
+function loadYaml(agentId) {
+  const yamlPath = path.join(agentsBase, agentId, 'agent.yaml');
+  if (!fs.existsSync(yamlPath)) {
+    console.error(`Error: agent.yaml not found for ${agentId}: ${yamlPath}`);
+    process.exit(1);
+  }
+  const content = fs.readFileSync(yamlPath, 'utf8');
+  const data = yaml.load(content);
+  return { yamlPath, data };
+}
+
+function saveYaml(yamlPath, data) {
+  fs.writeFileSync(yamlPath, yaml.dump(data, { lineWidth: -1 }), 'utf8');
+}
+
+if (cmd === 'add') {
+  const senderId = args[1];
+  if (!senderId) {
+    console.error('Usage: authorize add <agent_id>');
+    process.exit(1);
+  }
+  const { yamlPath, data } = loadYaml(currentAgent);
+  if (!Array.isArray(data.authorized_senders)) {
+    data.authorized_senders = [];
+  }
+  if (!data.authorized_senders.includes(senderId)) {
+    data.authorized_senders.push(senderId);
+    saveYaml(yamlPath, data);
+    console.log(`[authorize] Added ${senderId} to authorized_senders of ${currentAgent}`);
+  } else {
+    console.log(`[authorize] ${senderId} already in authorized_senders of ${currentAgent} (no-op)`);
+  }
+
+} else if (cmd === 'remove') {
+  const senderId = args[1];
+  if (!senderId) {
+    console.error('Usage: authorize remove <agent_id>');
+    process.exit(1);
+  }
+  const { yamlPath, data } = loadYaml(currentAgent);
+  if (!Array.isArray(data.authorized_senders)) {
+    data.authorized_senders = [];
+  }
+  const before = data.authorized_senders.length;
+  data.authorized_senders = data.authorized_senders.filter(s => s !== senderId);
+  saveYaml(yamlPath, data);
+  if (data.authorized_senders.length < before) {
+    console.log(`[authorize] Removed ${senderId} from authorized_senders of ${currentAgent}`);
+  } else {
+    console.log(`[authorize] ${senderId} was not in authorized_senders of ${currentAgent} (no-op)`);
+  }
+
+} else if (cmd === 'list') {
+  const targetAgent = args[1] || currentAgent;
+  const { data } = loadYaml(targetAgent);
+  const senders = Array.isArray(data.authorized_senders) ? data.authorized_senders : [];
+  if (senders.length === 0) {
+    console.log(`[authorize] authorized_senders of ${targetAgent}: [] (open to all)`);
+  } else {
+    console.log(`[authorize] authorized_senders of ${targetAgent}:`);
+    senders.forEach(s => console.log(`  - ${s}`));
+  }
+}

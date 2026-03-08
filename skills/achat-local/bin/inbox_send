@@ -6,6 +6,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 const os = require('os');
+const yaml = require('/Users/yaron/node_modules/js-yaml');
 
 // Usage: node inbox_send <to_key> <from_key> <subject> <message_body> [intent]
 const args = process.argv.slice(2);
@@ -27,6 +28,54 @@ if (bodyAndIntent.length > 0 && VALID_INTENTS.includes(bodyAndIntent[bodyAndInte
 const body = bodyParts.join(' ');
 
 const inboxBase = path.join(os.homedir(), '.metame', 'memory', 'inbox');
+
+// === Authorization Check ===
+const agentYamlPath = path.join(os.homedir(), '.metame', 'agents', toKey, 'agent.yaml');
+let authorizedSenders = []; // empty = open to all
+if (fs.existsSync(agentYamlPath)) {
+  try {
+    const agentData = yaml.load(fs.readFileSync(agentYamlPath, 'utf8'));
+    if (Array.isArray(agentData.authorized_senders) && agentData.authorized_senders.length > 0) {
+      authorizedSenders = agentData.authorized_senders;
+    }
+  } catch (err) {
+    // If yaml parse fails, treat as open (non-fatal)
+    console.warn(`[achat-local] Could not parse agent.yaml for ${toKey}: ${err.message}`);
+  }
+}
+
+if (authorizedSenders.length > 0 && !authorizedSenders.includes(fromKey)) {
+  // Write to pending/ instead of inbox
+  const pendingDir = path.join(inboxBase, toKey, 'pending');
+  fs.mkdirSync(pendingDir, { recursive: true });
+
+  const ts = new Date().toISOString();
+  const threadId = crypto.randomUUID();
+  const dateSlug = ts.replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `${dateSlug}_${fromKey}.md`;
+  const pendingPath = path.join(pendingDir, filename);
+
+  const pendingContent = [
+    `FROM: ${fromKey}`,
+    `TO: ${toKey}`,
+    `TS: ${ts}`,
+    `SUBJECT: ${subject}`,
+    `THREAD_ID: ${threadId}`,
+    `PSC_LEVEL: 0`,
+    `X-ACHAT-INTENT: SAY`,
+    `X-ACHAT-VISIBILITY: private`,
+    `X-ACHAT-VERSION: 0.1.0`,
+    `X-ACHAT-STATUS: pending`,
+    '',
+    body,
+  ].join('\n');
+
+  fs.writeFileSync(pendingPath, pendingContent, 'utf8');
+  console.warn(`[achat-local] BLOCKED from=${fromKey} not in authorized_senders of ${toKey} → written to pending/`);
+  process.exit(2);
+}
+// === End Authorization Check ===
+
 const inboxDir = path.join(inboxBase, toKey);
 
 // Ensure inbox directory exists
