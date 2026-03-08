@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const { AGENTS_DIR } = require(path.join(__dirname, '..', 'lib', 'platform'));
 
 // Usage: node verify_message <message_file_path>
 const args = process.argv.slice(2);
@@ -74,7 +75,7 @@ const emptyLineIdx = headerAndBody.indexOf('\n\n');
 const body = emptyLineIdx !== -1 ? headerAndBody.slice(emptyLineIdx + 2) : '';
 
 // Load public key for the signer
-const keyFile = path.join(os.homedir(), '.metame', 'agents', signedBy, 'key.json');
+const keyFile = path.join(AGENTS_DIR, signedBy, 'key.json');
 if (!fs.existsSync(keyFile)) {
   console.error(`Key not found for signer: ${signedBy}`);
   process.exit(1);

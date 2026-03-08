@@ -6,7 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 const os = require('os');
-const yaml = require('/Users/yaron/node_modules/js-yaml');
+const { AGENTS_DIR, requireYaml } = require(path.join(__dirname, '..', 'lib', 'platform'));
+const yaml = requireYaml();
 
 const SKILL_DIR = path.dirname(__dirname);
 const BIN_DIR = path.join(SKILL_DIR, 'bin');
@@ -170,7 +171,7 @@ function send(jsonFile) {
 function capabilities() {
   // Try to read the current agent's manifest from agent.yaml
   const agentKey = process.env.ACHAT_AGENT_ID || 'achat_pm';
-  const agentYamlPath = path.join(os.homedir(), '.metame', 'agents', agentKey, 'agent.yaml');
+  const agentYamlPath = path.join(AGENTS_DIR, agentKey, 'agent.yaml');
 
   let agentName = agentKey;
   let agentVersion = '0.1.0';

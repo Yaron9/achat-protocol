@@ -1,0 +1,19 @@
+{
+  "name": "@achat/local",
+  "version": "0.1.0",
+  "description": "AChat local skill - agent-to-agent communication",
+  "engines": { "node": ">=18.0.0" },
+  "bin": {
+    "achat-send": "./bin/inbox_send",
+    "achat-read": "./bin/inbox_read",
+    "achat-keygen": "./bin/keygen",
+    "achat-did": "./bin/did_gen",
+    "achat-thread": "./bin/thread_create",
+    "achat-bridge": "./bin/bridge_server"
+  },
+  "scripts": {
+    "test": "bash test/run_all.sh || node test/run_all.js"
+  },
+  "keywords": ["achat", "agent", "communication", "a2a"],
+  "license": "MIT"
+}

@@ -5,13 +5,14 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const { THREADS_DIR } = require(path.join(__dirname, '..', 'lib', 'platform'));
 
 // Usage: thread_create [subject] [participant1] [participant2...]
 const args = process.argv.slice(2);
 const subject = args[0] || '';
 const participants = args.slice(1);
 
-const threadsDir = path.join(os.homedir(), '.metame', 'memory', 'threads');
+const threadsDir = THREADS_DIR;
 fs.mkdirSync(threadsDir, { recursive: true });
 
 const threadId = crypto.randomUUID();

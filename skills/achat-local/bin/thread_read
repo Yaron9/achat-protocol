@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { THREADS_DIR } = require(path.join(__dirname, '..', 'lib', 'platform'));
 
 // Usage: thread_read <thread_id> [--json]
 const args = process.argv.slice(2);
@@ -15,7 +16,7 @@ if (args.length < 1) {
 const threadId = args[0];
 const jsonMode = args.includes('--json');
 
-const threadsDir = path.join(os.homedir(), '.metame', 'memory', 'threads');
+const threadsDir = THREADS_DIR;
 const filePath = path.join(threadsDir, `${threadId}.jsonl`);
 
 if (!fs.existsSync(filePath)) {

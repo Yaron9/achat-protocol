@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { AGENTS_DIR } = require(path.join(__dirname, '..', 'lib', 'platform'));
 
 const agentId = process.argv[2];
 if (!agentId) {
@@ -11,7 +12,7 @@ if (!agentId) {
   process.exit(1);
 }
 
-const yamlPath = path.join(os.homedir(), '.metame', 'agents', agentId, 'agent.yaml');
+const yamlPath = path.join(AGENTS_DIR, agentId, 'agent.yaml');
 
 if (!fs.existsSync(yamlPath)) {
   console.error(`错误: 文件不存在: ${yamlPath}`);

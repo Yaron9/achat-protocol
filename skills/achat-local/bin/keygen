@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const { AGENTS_DIR } = require(path.join(__dirname, '..', 'lib', 'platform'));
 
 // ---- Inline DID generation (did:key from Ed25519 public key) ----
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -36,7 +37,7 @@ function generateAndWriteDid(agentId, publicKeyBase64) {
   const payload = Buffer.concat([Buffer.from([0xed, 0x01]), rawPubKey]);
   const did = `did:key:z${base58Encode(payload)}`;
 
-  const yamlFile = path.join(os.homedir(), '.metame', 'agents', agentId, 'agent.yaml');
+  const yamlFile = path.join(AGENTS_DIR, agentId, 'agent.yaml');
   if (fs.existsSync(yamlFile)) {
     const yamlContent = fs.readFileSync(yamlFile, 'utf8');
     let updated;
@@ -59,7 +60,7 @@ if (args.length < 1) {
 }
 
 const agentId = args[0];
-const agentDir = path.join(os.homedir(), '.metame', 'agents', agentId);
+const agentDir = path.join(AGENTS_DIR, agentId);
 const keyFile = path.join(agentDir, 'key.json');
 
 // Check agent directory exists

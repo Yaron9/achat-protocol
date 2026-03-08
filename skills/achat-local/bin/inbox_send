@@ -6,7 +6,8 @@ const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 const os = require('os');
-const yaml = require('/Users/yaron/node_modules/js-yaml');
+const { AGENTS_DIR, INBOX_DIR, THREADS_DIR, requireYaml } = require(path.join(__dirname, '..', 'lib', 'platform'));
+const yaml = requireYaml();
 
 // Usage: node inbox_send <to_key> <from_key> <subject> <message_body> [intent]
 const args = process.argv.slice(2);
@@ -27,10 +28,10 @@ if (bodyAndIntent.length > 0 && VALID_INTENTS.includes(bodyAndIntent[bodyAndInte
 }
 const body = bodyParts.join(' ');
 
-const inboxBase = path.join(os.homedir(), '.metame', 'memory', 'inbox');
+const inboxBase = INBOX_DIR;
 
 // === Authorization Check ===
-const agentYamlPath = path.join(os.homedir(), '.metame', 'agents', toKey, 'agent.yaml');
+const agentYamlPath = path.join(AGENTS_DIR, toKey, 'agent.yaml');
 let authorizedSenders = []; // empty = open to all
 if (fs.existsSync(agentYamlPath)) {
   try {
@@ -90,7 +91,7 @@ const filepath = path.join(inboxDir, filename);
 
 // Read sender's DID from agent.yaml if available
 let fromDid = null;
-const senderYaml = path.join(os.homedir(), '.metame', 'agents', fromKey, 'agent.yaml');
+const senderYaml = path.join(AGENTS_DIR, fromKey, 'agent.yaml');
 if (fs.existsSync(senderYaml)) {
   try {
     const yamlContent = fs.readFileSync(senderYaml, 'utf8');
@@ -124,7 +125,7 @@ const content = headers.join('\n');
 
 // Attempt to sign the message
 let finalContent = content;
-const keyFile = path.join(os.homedir(), '.metame', 'agents', fromKey, 'key.json');
+const keyFile = path.join(AGENTS_DIR, fromKey, 'key.json');
 if (fs.existsSync(keyFile)) {
   try {
     const keyData = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
@@ -153,7 +154,7 @@ console.log(`[achat-local] Message written → ${filepath}`);
 
 // === Thread Auto-Sync ===
 {
-  const threadsDir = path.join(os.homedir(), '.metame', 'memory', 'threads');
+  const threadsDir = THREADS_DIR;
   fs.mkdirSync(threadsDir, { recursive: true });
 
   const threadFilePath = path.join(threadsDir, `${threadId}.jsonl`);
@@ -216,7 +217,8 @@ console.log(`[achat-local] Message written → ${filepath}`);
 
 // Dispatch notification via MetaMe dispatch_to (best-effort)
 try {
-  const dispatchBin = path.join(os.homedir(), '.metame', 'bin', 'dispatch_to');
+  const { METAME_DIR } = require(path.join(__dirname, '..', 'lib', 'platform'));
+  const dispatchBin = path.join(METAME_DIR, 'bin', 'dispatch_to');
   execSync(`node ${dispatchBin} ${toKey} "📨 新消息来自 ${fromKey}: ${subject}" --from ${fromKey}`, {
     stdio: 'pipe',
     timeout: 5000,

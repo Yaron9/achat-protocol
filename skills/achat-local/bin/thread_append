@@ -5,7 +5,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
-const yaml = require('/Users/yaron/node_modules/js-yaml');
+const { AGENTS_DIR, THREADS_DIR, requireYaml } = require(path.join(__dirname, '..', 'lib', 'platform'));
+const yaml = requireYaml();
 
 // Usage: thread_append <thread_id> <from> <to> <text> [intent=SAY]
 const args = process.argv.slice(2);
@@ -25,7 +26,7 @@ if (textAndIntent.length > 0 && VALID_INTENTS.includes(textAndIntent[textAndInte
 }
 const text = textParts.join(' ');
 
-const threadsDir = path.join(os.homedir(), '.metame', 'memory', 'threads');
+const threadsDir = THREADS_DIR;
 const filePath = path.join(threadsDir, `${threadId}.jsonl`);
 
 if (!fs.existsSync(filePath)) {
@@ -49,7 +50,7 @@ try {
 
 // Read sender's DID from agent.yaml
 let fromDid = null;
-const agentYamlPath = path.join(os.homedir(), '.metame', 'agents', fromKey, 'agent.yaml');
+const agentYamlPath = path.join(AGENTS_DIR, fromKey, 'agent.yaml');
 if (fs.existsSync(agentYamlPath)) {
   try {
     const agentData = yaml.load(fs.readFileSync(agentYamlPath, 'utf8'));
@@ -65,7 +66,7 @@ if (fs.existsSync(agentYamlPath)) {
 let signature = null;
 let signedAt = null;
 const ts = new Date().toISOString();
-const keyFile = path.join(os.homedir(), '.metame', 'agents', fromKey, 'key.json');
+const keyFile = path.join(AGENTS_DIR, fromKey, 'key.json');
 if (fs.existsSync(keyFile)) {
   try {
     const keyData = JSON.parse(fs.readFileSync(keyFile, 'utf8'));

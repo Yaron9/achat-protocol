@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { AGENTS_DIR } = require(path.join(__dirname, '..', 'lib', 'platform'));
 
 // Base58btc alphabet (Bitcoin alphabet)
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
@@ -52,7 +53,7 @@ function generateDid(publicKeyBase64) {
 const args = process.argv.slice(2);
 const agentId = args[0] || process.env.ACHAT_AGENT_ID || 'achat_pm';
 
-const agentDir = path.join(os.homedir(), '.metame', 'agents', agentId);
+const agentDir = path.join(AGENTS_DIR, agentId);
 const keyFile = path.join(agentDir, 'key.json');
 const yamlFile = path.join(agentDir, 'agent.yaml');
 

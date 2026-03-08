@@ -4,9 +4,10 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const yaml = require('/Users/yaron/node_modules/js-yaml');
+const { AGENTS_DIR, requireYaml } = require(path.join(__dirname, '..', 'lib', 'platform'));
+const yaml = requireYaml();
 
-const agentsBase = path.join(os.homedir(), '.metame', 'agents');
+const agentsBase = AGENTS_DIR;
 const currentAgent = process.env.ACHAT_AGENT_ID || 'achat_pm';
 
 const args = process.argv.slice(2);

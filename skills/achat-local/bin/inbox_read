@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { INBOX_DIR } = require(path.join(__dirname, '..', 'lib', 'platform'));
 
 // Usage: node inbox_read <my_key> [--all]
 const args = process.argv.slice(2);
@@ -15,7 +16,7 @@ if (args.length < 1) {
 const myKey = args[0];
 const showAll = args.includes('--all');
 
-const inboxBase = path.join(os.homedir(), '.metame', 'memory', 'inbox');
+const inboxBase = INBOX_DIR;
 const inboxDir = path.join(inboxBase, myKey);
 const readDir = path.join(inboxDir, 'read');
 

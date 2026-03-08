@@ -4,7 +4,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const yaml = require('/Users/yaron/node_modules/js-yaml');
+const { AGENTS_DIR, requireYaml } = require(path.join(__dirname, '..', 'lib', 'platform'));
+const yaml = requireYaml();
 
 const { start } = require(path.join(__dirname, '..', 'lib', 'bridge_server'));
 
@@ -31,7 +32,7 @@ if (!configPath) {
   } else {
     // Try ~/.metame/agents/{agent_id}/bridge.yaml (agent_id from env or default)
     const agentId = process.env.ACHAT_AGENT_ID || 'achat_pm';
-    const metamePath = path.join(os.homedir(), '.metame', 'agents', agentId, 'bridge.yaml');
+    const metamePath = path.join(AGENTS_DIR, agentId, 'bridge.yaml');
     const localPath = path.join(process.cwd(), 'bridge.yaml');
     const skillConfigPath = path.join(__dirname, '..', 'config', 'bridge.example.yaml');
 
