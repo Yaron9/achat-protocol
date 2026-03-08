@@ -1,0 +1,139 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://achat.protocol/schema/capability_card.schema.json",
+  "title": "AChat Capability Card",
+  "description": "A2A Agent Card 兼容格式 + AChat 扩展字段",
+  "type": "object",
+  "required": ["id", "name", "project_key", "engine"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Agent 唯一标识符"
+    },
+    "name": {
+      "type": "string",
+      "description": "Agent 显示名称"
+    },
+    "project_key": {
+      "type": "string",
+      "description": "项目标识，用于路由"
+    },
+    "engine": {
+      "type": "string",
+      "description": "底层模型引擎，如 claude / gpt-4 / gemini"
+    },
+    "aliases": {
+      "type": "array",
+      "description": "Agent 昵称列表，用于 dispatch 路由",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "did": {
+      "oneOf": [
+        { "type": "string", "pattern": "^did:" },
+        { "type": "null" }
+      ],
+      "description": "W3C DID 身份标识符，Step 5 填入",
+      "default": null
+    },
+    "skills": {
+      "type": "array",
+      "description": "Agent 能力列表（A2A skill 格式）",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      },
+      "default": []
+    },
+    "pricing": {
+      "type": "object",
+      "description": "计费模型（预留字段）",
+      "required": ["model"],
+      "properties": {
+        "model": {
+          "type": "string",
+          "enum": ["free", "per_call", "subscription", "custom"],
+          "description": "计费模式",
+          "default": "free"
+        },
+        "currency": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "null" }
+          ],
+          "description": "货币单位，如 USD / CNY",
+          "default": null
+        },
+        "unit_price": {
+          "oneOf": [
+            { "type": "number", "minimum": 0 },
+            { "type": "null" }
+          ],
+          "description": "单次调用价格",
+          "default": null
+        }
+      },
+      "default": {
+        "model": "free",
+        "currency": null,
+        "unit_price": null
+      }
+    },
+    "contact_policy": {
+      "type": "string",
+      "enum": ["whitelist_only", "open", "request_approval"],
+      "description": "消息接收策略",
+      "default": "whitelist_only"
+    },
+    "authorized_senders": {
+      "type": "array",
+      "description": "白名单发件人 DID 列表",
+      "items": {
+        "type": "string",
+        "pattern": "^did:"
+      },
+      "default": []
+    },
+    "achat": {
+      "type": "object",
+      "description": "AChat 协议扩展字段",
+      "required": ["version"],
+      "properties": {
+        "version": {
+          "type": "string",
+          "description": "AChat 协议版本",
+          "default": "0.1.0"
+        },
+        "psc_level_max": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "支持的最高 PSC 语义压缩等级（0=文本, 1=结构化, 2=Schema, 3=向量）",
+          "default": 0
+        },
+        "thread": {
+          "type": "boolean",
+          "description": "是否支持 Thread 持久化多轮对话",
+          "default": true
+        }
+      },
+      "default": {
+        "version": "0.1.0",
+        "psc_level_max": 0,
+        "thread": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

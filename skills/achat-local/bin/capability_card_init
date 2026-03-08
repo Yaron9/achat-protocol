@@ -1,0 +1,80 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
+const agentId = process.argv[2];
+if (!agentId) {
+  console.error('用法: node capability_card_init <agent_id>');
+  process.exit(1);
+}
+
+const yamlPath = path.join(os.homedir(), '.metame', 'agents', agentId, 'agent.yaml');
+
+if (!fs.existsSync(yamlPath)) {
+  console.error(`错误: 文件不存在: ${yamlPath}`);
+  process.exit(1);
+}
+
+// Simple YAML parser for flat/nested structures we care about
+// Strategy: read as text, detect missing top-level keys, append them
+
+const content = fs.readFileSync(yamlPath, 'utf8');
+
+// Detect which top-level keys already exist
+function hasTopLevelKey(text, key) {
+  const re = new RegExp(`^${key}[:\\s]`, 'm');
+  return re.test(text);
+}
+
+const defaults = [
+  {
+    key: 'did',
+    yaml: 'did: null',
+  },
+  {
+    key: 'skills',
+    yaml: 'skills: []',
+  },
+  {
+    key: 'pricing',
+    yaml: `pricing:
+  model: "free"
+  currency: null
+  unit_price: null`,
+  },
+  {
+    key: 'contact_policy',
+    yaml: 'contact_policy: "whitelist_only"',
+  },
+  {
+    key: 'authorized_senders',
+    yaml: 'authorized_senders: []',
+  },
+  {
+    key: 'achat',
+    yaml: `achat:
+  version: "0.1.0"
+  psc_level_max: 0
+  thread: true`,
+  },
+];
+
+let updatedContent = content.trimEnd();
+const addedFields = [];
+
+for (const { key, yaml } of defaults) {
+  if (!hasTopLevelKey(updatedContent, key)) {
+    updatedContent += '\n' + yaml;
+    addedFields.push(key);
+  }
+}
+
+if (addedFields.length > 0) {
+  fs.writeFileSync(yamlPath, updatedContent + '\n', 'utf8');
+  console.log(`已更新字段: ${addedFields.join(', ')}`);
+} else {
+  console.log('所有 Capability Card 字段已存在，无需更新。');
+}
