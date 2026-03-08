@@ -1,0 +1,235 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { execSync } = require('child_process');
+const os = require('os');
+const yaml = require('/Users/yaron/node_modules/js-yaml');
+
+const SKILL_DIR = path.dirname(__dirname);
+const BIN_DIR = path.join(SKILL_DIR, 'bin');
+const INBOX_SEND = path.join(BIN_DIR, 'inbox_send');
+
+const VALID_INTENTS = ['SAY', 'ASK', 'PROPOSE', 'DECIDE', 'DELEGATE', 'UPDATE', 'BLOCK'];
+
+const PLATFORM_DISPLAY = {
+  wechat: '微信',
+  feishu: '飞书',
+  telegram: 'Telegram',
+  metame: 'MetaMe',
+  slack: 'Slack',
+  discord: 'Discord',
+};
+
+// ===== normalize =====
+function normalize(jsonFile) {
+  if (!fs.existsSync(jsonFile)) {
+    console.error(`[bridge_stub] File not found: ${jsonFile}`);
+    process.exit(1);
+  }
+
+  let raw;
+  try {
+    raw = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+  } catch (e) {
+    console.error(`[bridge_stub] Invalid JSON: ${e.message}`);
+    process.exit(1);
+  }
+
+  // Validate required fields
+  const required = ['platform', 'sender_id', 'text', 'ts'];
+  for (const field of required) {
+    if (!raw[field]) {
+      console.error(`[bridge_stub] Missing required field: ${field}`);
+      process.exit(1);
+    }
+  }
+
+  // Resolve from: use explicit achat_from if provided, else derive from sender_id
+  const from = raw.achat_from || raw.sender_id.replace(/[^a-zA-Z0-9_]/g, '_');
+
+  // Resolve to: use explicit achat_to if provided, else fall back to env or 'metame'
+  const to = raw.achat_to || process.env.ACHAT_AGENT_ID || 'metame';
+
+  // Resolve thread_id: use existing or derive from chat_id to maintain session continuity
+  let thread_id = raw.thread_id;
+  if (!thread_id) {
+    if (raw.chat_id) {
+      // Deterministic UUID from platform+chat_id for session continuity
+      const seed = `${raw.platform}:${raw.chat_id}`;
+      const hash = crypto.createHash('sha256').update(seed).digest('hex');
+      // Format as UUID v4 (pseudo)
+      thread_id = [
+        hash.slice(0, 8),
+        hash.slice(8, 12),
+        '4' + hash.slice(13, 16),
+        ((parseInt(hash.slice(16, 17), 16) & 0x3) | 0x8).toString(16) + hash.slice(17, 20),
+        hash.slice(20, 32),
+      ].join('-');
+    } else {
+      thread_id = crypto.randomUUID();
+    }
+  }
+
+  // Parse intent from text prefix (e.g., /ask, /propose)
+  let intent = 'SAY';
+  let body = raw.text;
+  const intentMatch = raw.text.match(/^\/(\w+)\s*([\s\S]*)$/);
+  if (intentMatch) {
+    const candidate = intentMatch[1].toUpperCase();
+    if (VALID_INTENTS.includes(candidate)) {
+      intent = candidate;
+      body = intentMatch[2].trim() || raw.text;
+    }
+  }
+
+  // Build subject
+  const senderDisplay = raw.sender_name || raw.sender_id;
+  const platformDisplay = PLATFORM_DISPLAY[raw.platform] || raw.platform;
+  const subject = raw.subject || `[${platformDisplay}] 来自 ${senderDisplay} 的消息`;
+
+  const normalized = {
+    from,
+    to,
+    subject,
+    body,
+    intent,
+    thread_id,
+    platform_ref: {
+      platform: raw.platform,
+      chat_id: raw.chat_id || '',
+      sender_id: raw.sender_id,
+      message_ts: raw.ts,
+    },
+  };
+
+  console.log(JSON.stringify(normalized, null, 2));
+}
+
+// ===== send =====
+function send(jsonFile) {
+  if (!fs.existsSync(jsonFile)) {
+    console.error(`[bridge_stub] File not found: ${jsonFile}`);
+    process.exit(1);
+  }
+
+  let msg;
+  try {
+    msg = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+  } catch (e) {
+    console.error(`[bridge_stub] Invalid JSON: ${e.message}`);
+    process.exit(1);
+  }
+
+  // Validate required fields
+  const required = ['from', 'to', 'subject', 'body'];
+  for (const field of required) {
+    if (!msg[field]) {
+      console.error(`[bridge_stub] Missing required field: ${field}`);
+      process.exit(1);
+    }
+  }
+
+  const { from, to, subject, body, intent } = msg;
+  const intentArg = VALID_INTENTS.includes((intent || '').toUpperCase())
+    ? intent.toUpperCase()
+    : 'SAY';
+
+  if (!fs.existsSync(INBOX_SEND)) {
+    console.error(`[bridge_stub] inbox_send not found at: ${INBOX_SEND}`);
+    process.exit(1);
+  }
+
+  try {
+    const result = execSync(
+      `node ${INBOX_SEND} ${to} ${from} "${subject.replace(/"/g, '\\"')}" "${body.replace(/"/g, '\\"')}" ${intentArg}`,
+      { stdio: 'pipe', timeout: 10000 }
+    );
+    const output = result.toString('utf8').trim();
+    if (output) console.log(output);
+    console.log(`[bridge_stub] SENT from=${from} to=${to} subject="${subject}"`);
+  } catch (err) {
+    const stderr = err.stderr ? err.stderr.toString('utf8').trim() : '';
+    const stdout = err.stdout ? err.stdout.toString('utf8').trim() : '';
+    // Exit code 2 = blocked (pending), still informative not a crash
+    if (err.status === 2) {
+      if (stdout) console.log(stdout);
+      if (stderr) console.warn(stderr);
+      console.warn(`[bridge_stub] Message sent to pending/ (sender not authorized)`);
+      process.exit(2);
+    }
+    console.error(`[bridge_stub] inbox_send failed: ${err.message}`);
+    if (stderr) console.error(stderr);
+    process.exit(1);
+  }
+}
+
+// ===== capabilities =====
+function capabilities() {
+  // Try to read the current agent's manifest from agent.yaml
+  const agentKey = process.env.ACHAT_AGENT_ID || 'achat_pm';
+  const agentYamlPath = path.join(os.homedir(), '.metame', 'agents', agentKey, 'agent.yaml');
+
+  let agentName = agentKey;
+  let agentVersion = '0.1.0';
+
+  if (fs.existsSync(agentYamlPath)) {
+    try {
+      const agentData = yaml.load(fs.readFileSync(agentYamlPath, 'utf8'));
+      agentName = agentData.name || agentKey;
+      agentVersion = (agentData.achat && agentData.achat.version) || '0.1.0';
+    } catch (e) {
+      // non-fatal, use defaults
+    }
+  }
+
+  const manifest = {
+    name: 'MetaMeLocalAdapter',
+    platform: 'metame',
+    version: agentVersion,
+    capabilities: [
+      'normalize',
+      'send',
+      'signature_verify',
+      'thread_tracking',
+    ],
+    auth_type: 'local_ipc',
+  };
+
+  console.log(JSON.stringify(manifest, null, 2));
+}
+
+// ===== Main =====
+const args = process.argv.slice(2);
+const command = args[0];
+
+switch (command) {
+  case 'normalize':
+    if (!args[1]) {
+      console.error('Usage: bridge_stub normalize <json_file>');
+      process.exit(1);
+    }
+    normalize(args[1]);
+    break;
+
+  case 'send':
+    if (!args[1]) {
+      console.error('Usage: bridge_stub send <json_file>');
+      process.exit(1);
+    }
+    send(args[1]);
+    break;
+
+  case 'capabilities':
+    capabilities();
+    break;
+
+  default:
+    console.error('Usage:');
+    console.error('  bridge_stub normalize <json_file>   # 标准化一条消息');
+    console.error('  bridge_stub send <json_file>        # 发送消息（本地：调用 inbox_send）');
+    console.error('  bridge_stub capabilities            # 打印适配器元数据');
+    process.exit(1);
+}
