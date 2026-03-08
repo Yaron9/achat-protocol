@@ -151,6 +151,69 @@ if (fs.existsSync(keyFile)) {
 fs.writeFileSync(filepath, finalContent, 'utf8');
 console.log(`[achat-local] Message written → ${filepath}`);
 
+// === Thread Auto-Sync ===
+{
+  const threadsDir = path.join(os.homedir(), '.metame', 'memory', 'threads');
+  fs.mkdirSync(threadsDir, { recursive: true });
+
+  const threadFilePath = path.join(threadsDir, `${threadId}.jsonl`);
+
+  // If thread file doesn't exist, create it (implicit thread_create)
+  if (!fs.existsSync(threadFilePath)) {
+    const contextId = crypto.randomUUID();
+    const threadHeader = {
+      type: 'thread_header',
+      thread_id: threadId,
+      context_id: contextId,
+      created_at: ts,
+      participants: [fromKey, toKey],
+      subject: subject,
+    };
+    fs.writeFileSync(threadFilePath, JSON.stringify(threadHeader) + '\n', 'utf8');
+  }
+
+  // Read existing lines to determine seq and contextId
+  const existingLines = fs.readFileSync(threadFilePath, 'utf8').trim().split('\n').filter(l => l.trim());
+  const seq = existingLines.length; // header=line 0 counted, messages start at seq=1
+
+  let contextId2 = threadId;
+  try {
+    const hdr = JSON.parse(existingLines[0]);
+    if (hdr.context_id) contextId2 = hdr.context_id;
+  } catch (e) { /* non-fatal */ }
+
+  // Build signature info from finalContent if signed
+  let msgSignature = null;
+  let msgSignedAt = null;
+  const sigMatch = finalContent.match(/^SIGNATURE: (.+)$/m);
+  const sigAtMatch = finalContent.match(/^SIGNED_AT: (.+)$/m);
+  if (sigMatch) msgSignature = sigMatch[1].trim();
+  if (sigAtMatch) msgSignedAt = sigAtMatch[1].trim();
+
+  const msgEntry = {
+    seq,
+    type: 'message',
+    role: 'user',
+    from: fromKey,
+    to: toKey,
+    ts,
+    contextId: contextId2,
+    parts: [{ kind: 'text', text: body }],
+    metadata: {
+      intent,
+      visibility: 'private',
+      version: '0.1.0',
+      ...(fromDid ? { from_did: fromDid } : {}),
+      subject,
+      ...(msgSignature ? { signature: msgSignature, signed_by: fromKey, signed_at: msgSignedAt } : {}),
+    },
+  };
+
+  fs.appendFileSync(threadFilePath, JSON.stringify(msgEntry) + '\n', 'utf8');
+  console.log(`[achat-local] Thread synced → ${threadFilePath} (seq=${seq})`);
+}
+// === End Thread Auto-Sync ===
+
 // Dispatch notification via MetaMe dispatch_to (best-effort)
 try {
   const dispatchBin = path.join(os.homedir(), '.metame', 'bin', 'dispatch_to');
